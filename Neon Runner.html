@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Runner</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(45deg, #0a0a2e, #16213e, #0f3460);
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+        
+        canvas {
+            border: 2px solid #00ffff;
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.5);
+            background: #000011;
+        }
+        
+        .hud {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #00ffff;
+            text-align: center;
+            font-size: 18px;
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+        }
+        
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #00ffaa;
+            text-align: center;
+            font-size: 14px;
+            text-shadow: 0 0 5px rgba(0, 255, 170, 0.6);
+        }
+
+        .title {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff00ff;
+            font-size: 36px;
+            font-weight: bold;
+            text-shadow: 0 0 20px rgba(255, 0, 255, 0.8);
+            z-index: 10;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="hud">
+        <div id="score">Score: 0</div>
+        <div id="speed">Speed: 1x</div>
+        <div id="gameState" style="font-size: 16px; margin-top: 10px;"></div>
+    </div>
+    
+    <div class="title" id="gameTitle">NEON RUNNER</div>
+    
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    
+    <div class="controls">
+        <div>SPACE: Switch Gravity | WASD: Move | R: Restart</div>
+        <div>Collect energy orbs • Avoid laser barriers</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const speedElement = document.getElementById('speed');
+        const gameStateElement = document.getElementById('gameState');
+        const gameTitleElement = document.getElementById('gameTitle');
+        
+        let gameState = 'menu'; 
+        let score = 0;
+        let gameSpeed = 3.5; 
+        let frames = 0;
+        let difficulty = 1;
+
+        
+        const player = {
+            x: 100,
+            y: canvas.height / 2,
+            width: 18, 
+            height: 18,
+            velocityX: 0,
+            velocityY: 0,
+            speed: 5, 
+            gravityDirection: 1, 
+            gravityStrength: 0.4, 
+            onGround: false,
+            trail: [],
+            invulnerable: 0 
+        };
+
+        
+        let obstacles = [];
+        let orbs = [];
+        let particles = [];
+        let backgroundElements = [];
+        let movingHazards = []; 
+        let warningZones = []; 
+        function initBackground() {
+            backgroundElements = [];
+            for (let i = 0; i < 50; i++) {
+                backgroundElements.push({
+                    x: Math.random() * canvas.width * 2,
+                    y: Math.random() * canvas.height,
+                    size: Math.random() * 2 + 1,
+                    speed: Math.random() * 0.5 + 0.2,
+                    opacity: Math.random() * 0.5 + 0.2
+                });
+            }
+        }
+
+        
+        function createObstacle() {
+            const types = ['laser', 'barrier', 'spike', 'crusher', 'wave'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            
+            if (type === 'laser') {
+                
+                const laserCount = Math.random() < 0.6 ? 1 : Math.floor(Math.random() * 3) + 2;
+                for (let i = 0; i < laserCount; i++) {
+                    obstacles.push({
+                        type: 'laser',
+                        x: canvas.width + (i * 30),
+                        y: Math.random() * (canvas.height - 120) + 60,
+                        width: 8,
+                        height: Math.random() * 80 + 40,
+                        color: '#ff0040',
+                        pulse: Math.random() * Math.PI
+                    });
+                }
+            } else if (type === 'barrier') {
+                const height = Math.random() * 120 + 60;
+                const isTop = Math.random() > 0.5;
+                obstacles.push({
+                    type: 'barrier',
+                    x: canvas.width,
+                    y: isTop ? 0 : canvas.height - height,
+                    width: 20,
+                    height: height,
+                    color: '#ff4000',
+                    segments: Math.floor(height / 8)
+                });
+                
+                
+                if (Math.random() < 0.4 && height < canvas.height * 0.6) {
+                    obstacles.push({
+                        type: 'barrier',
+                        x: canvas.width,
+                        y: isTop ? canvas.height - 60 : 0,
+                        width: 20,
+                        height: 60,
+                        color: '#ff4000',
+                        segments: 7
+                    });
+                }
+            } else if (type === 'spike') {
+                
+                const spikeCount = Math.floor(Math.random() * 3) + 1;
+                for (let i = 0; i < spikeCount; i++) {
+                    const isTop = Math.random() > 0.5;
+                    obstacles.push({
+                        type: 'spike',
+                        x: canvas.width + (i * 25),
+                        y: isTop ? 0 : canvas.height - 35,
+                        width: 22,
+                        height: 35,
+                        color: '#ff8000'
+                    });
+                }
+            } else if (type === 'crusher') {
+                obstacles.push({
+                    type: 'crusher',
+                    x: canvas.width,
+                    y: 0,
+                    width: 25,
+                    topHeight: Math.random() * 100 + 50,
+                    bottomHeight: Math.random() * 100 + 50,
+                    color: '#ff00aa',
+                    phase: 0,
+                    speed: 0.15
+                });
+            } else if (type === 'wave') {
+                for (let i = 0; i < 5; i++) {
+                    obstacles.push({
+                        type: 'wave',
+                        x: canvas.width + (i * 40),
+                        y: canvas.height / 2,
+                        width: 12,
+                        height: 60,
+                        color: '#aa00ff',
+                        amplitude: 80,
+                        frequency: 0.1 + (i * 0.02),
+                        phase: i * Math.PI / 3
+                    });
+                }
+            }
+        }
+
+        
+        function createMovingHazard() {
+            const types = ['seeker', 'bouncer', 'spinner'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            
+            if (type === 'seeker') {
+                movingHazards.push({
+                    type: 'seeker',
+                    x: canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: 15,
+                    velocityX: -gameSpeed,
+                    velocityY: 0,
+                    color: '#ff0088',
+                    seekForce: 0.1,
+                    life: 300
+                });
+            } else if (type === 'bouncer') {
+                movingHazards.push({
+                    type: 'bouncer',
+                    x: canvas.width,
+                    y: canvas.height / 2,
+                    size: 12,
+                    velocityX: -gameSpeed,
+                    velocityY: Math.random() * 4 - 2,
+                    color: '#ff4400',
+                    bounceCount: 0,
+                    maxBounces: 4
+                });
+            } else if (type === 'spinner') {
+                movingHazards.push({
+                    type: 'spinner',
+                    x: canvas.width,
+                    y: Math.random() * (canvas.height - 100) + 50,
+                    size: 20,
+                    velocityX: -gameSpeed * 0.8,
+                    angle: 0,
+                    color: '#aa00ff',
+                    spikes: 8,
+                    life: 250
+                });
+            }
+        }
+
+        
+        function createOrb() {
+            orbs.push({
+                x: canvas.width,
+                y: Math.random() * (canvas.height - 100) + 50,
+                radius: 10, 
+                color: '#00ff88',
+                pulse: 0,
+                collected: false,
+                particles: []
+            });
+        }
+
+        
+        function createWarning(x, y, width, height) {
+            warningZones.push({
+                x: x,
+                y: y,
+                width: width,
+                height: height,
+                life: 60,
+                maxLife: 60
+            });
+        }
+
+        
+        function createParticles(x, y, color, count = 10) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    velocityX: (Math.random() - 0.5) * 8,
+                    velocityY: (Math.random() - 0.5) * 8,
+                    life: 30,
+                    maxLife: 30,
+                    color: color,
+                    size: Math.random() * 4 + 2
+                });
+            }
+        }
+
+        
+        function drawPlayer() {
+            if (frames % 3 === 0) {
+                player.trail.push({
+                    x: player.x + player.width / 2,
+                    y: player.y + player.height / 2,
+                    life: 15
+                });
+            }
+
+            
+            player.trail = player.trail.filter(t => {
+                t.life--;
+                if (t.life > 0) {
+                    const alpha = t.life / 15;
+                    ctx.globalAlpha = alpha * 0.6;
+                    ctx.fillStyle = '#00ffff';
+                    ctx.fillRect(t.x - 2, t.y - 2, 4, 4);
+                    return true;
+                }
+                return false;
+            });
+
+            ctx.globalAlpha = 1;
+
+            
+            ctx.shadowColor = '#00ffff';
+            ctx.shadowBlur = 15;
+            ctx.fillStyle = '#00ffff';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+
+            
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(player.x + 4, player.y + 4, player.width - 8, player.height - 8);
+
+            
+            const indicatorY = player.gravityDirection === 1 ? 
+                player.y + player.height + 10 : player.y - 15;
+            ctx.fillStyle = player.gravityDirection === 1 ? '#ff4040' : '#4040ff';
+            ctx.font = '12px Courier New';
+            ctx.fillText(player.gravityDirection === 1 ? '▼' : '▲', 
+                player.x + player.width / 2 - 6, indicatorY);
+        }
+        
+        function drawObstacles() {
+            obstacles.forEach(obstacle => {
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = obstacle.color;
+                
+                if (obstacle.type === 'laser') {
+                    obstacle.pulse += 0.3; 
+                    const intensity = Math.sin(obstacle.pulse) * 0.4 + 0.6;
+                    ctx.globalAlpha = intensity;
+                    ctx.fillStyle = obstacle.color;
+                    ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                    
+                    
+                    ctx.strokeStyle = obstacle.color;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(obstacle.x + obstacle.width/2, obstacle.y);
+                    ctx.lineTo(obstacle.x + obstacle.width/2, obstacle.y + obstacle.height);
+                    ctx.stroke();
+                    
+                } else if (obstacle.type === 'barrier') {
+                    ctx.fillStyle = obstacle.color;
+                    for (let i = 0; i < obstacle.segments; i++) {
+                        const segmentY = obstacle.y + i * 8;
+                        ctx.fillRect(obstacle.x, segmentY, obstacle.width, 6);
+                        
+                        if (i < obstacle.segments - 1) {
+                            ctx.strokeStyle = obstacle.color;
+                            ctx.lineWidth = 2;
+                            ctx.beginPath();
+                            ctx.moveTo(obstacle.x + obstacle.width, segmentY + 3);
+                            ctx.lineTo(obstacle.x + obstacle.width, segmentY + 8);
+                            ctx.stroke();
+                        }
+                    }
+                    
+                } else if (obstacle.type === 'spike') {
+                    ctx.fillStyle = obstacle.color;
+                    ctx.beginPath();
+                    if (obstacle.y === 0) {
+                        ctx.moveTo(obstacle.x, obstacle.y);
+                        ctx.lineTo(obstacle.x + obstacle.width / 2, obstacle.y + obstacle.height);
+                        ctx.lineTo(obstacle.x + obstacle.width, obstacle.y);
+                    } else {
+                        ctx.moveTo(obstacle.x, obstacle.y + obstacle.height);
+                        ctx.lineTo(obstacle.x + obstacle.width / 2, obstacle.y);
+                        ctx.lineTo(obstacle.x + obstacle.width, obstacle.y + obstacle.height);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    
+                } else if (obstacle.type === 'crusher') {
+                    obstacle.phase += obstacle.speed;
+                    const offset = Math.sin(obstacle.phase) * 30;
+                    
+                    ctx.fillStyle = obstacle.color;
+                    
+                    ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.topHeight + offset);
+                    
+                    ctx.fillRect(obstacle.x, canvas.height - obstacle.bottomHeight - offset, 
+                        obstacle.width, obstacle.bottomHeight + offset);
+                    
+                } else if (obstacle.type === 'wave') {
+                    obstacle.phase += obstacle.frequency;
+                    const waveY = obstacle.y + Math.sin(obstacle.phase) * obstacle.amplitude;
+                    
+                    ctx.fillStyle = obstacle.color;
+                    ctx.fillRect(obstacle.x, waveY - obstacle.height/2, obstacle.width, obstacle.height);
+                }
+                
+                ctx.globalAlpha = 1;
+                ctx.shadowBlur = 0;
+            });
+        }
+
+        
+        function drawMovingHazards() {
+            movingHazards.forEach(hazard => {
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = hazard.color;
+                
+                if (hazard.type === 'seeker') {
+                    ctx.fillStyle = hazard.color;
+                    ctx.beginPath();
+                    ctx.arc(hazard.x, hazard.y, hazard.size, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    
+                    ctx.strokeStyle = hazard.color;
+                    ctx.lineWidth = 3;
+                    ctx.globalAlpha = 0.3;
+                    ctx.beginPath();
+                    ctx.moveTo(hazard.x, hazard.y);
+                    ctx.lineTo(player.x + player.width/2, player.y + player.height/2);
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                    
+                } else if (hazard.type === 'bouncer') {
+                    ctx.fillStyle = hazard.color;
+                    ctx.fillRect(hazard.x - hazard.size/2, hazard.y - hazard.size/2, 
+                        hazard.size, hazard.size);
+                    
+                } else if (hazard.type === 'spinner') {
+                    hazard.angle += 0.2;
+                    ctx.save();
+                    ctx.translate(hazard.x, hazard.y);
+                    ctx.rotate(hazard.angle);
+                    
+                    ctx.fillStyle = hazard.color;
+                    for (let i = 0; i < hazard.spikes; i++) {
+                        ctx.save();
+                        ctx.rotate((Math.PI * 2 * i) / hazard.spikes);
+                        ctx.beginPath();
+                        ctx.moveTo(0, 0);
+                        ctx.lineTo(hazard.size, -3);
+                        ctx.lineTo(hazard.size, 3);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.restore();
+                    }
+                    ctx.restore();
+                }
+                
+                ctx.shadowBlur = 0;
+            });
+        }
+
+        
+        function drawWarnings() {
+            warningZones.forEach(warning => {
+                const alpha = (warning.life / warning.maxLife) * 0.3;
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = '#ffff00';
+                ctx.fillRect(warning.x, warning.y, warning.width, warning.height);
+                
+                ctx.strokeStyle = '#ffff00';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(warning.x, warning.y, warning.width, warning.height);
+            });
+            ctx.globalAlpha = 1;
+        }
+
+        
+        function drawOrbs() {
+            orbs.forEach(orb => {
+                if (!orb.collected) {
+                    orb.pulse += 0.15;
+                    const size = orb.radius + Math.sin(orb.pulse) * 3;
+                    
+                    ctx.shadowColor = orb.color;
+                    ctx.shadowBlur = 20;
+                    ctx.fillStyle = orb.color;
+                    ctx.beginPath();
+                    ctx.arc(orb.x, orb.y, size, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Inner glow
+                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.arc(orb.x, orb.y, size * 0.3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+        }
+
+        
+        function drawBackground() {
+            
+            ctx.strokeStyle = 'rgba(0, 100, 150, 0.3)';
+            ctx.lineWidth = 1;
+            
+            for (let i = 0; i < canvas.width; i += 40) {
+                const x = (i - frames * 0.5) % canvas.width;
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            
+            for (let i = 0; i < canvas.height; i += 40) {
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(canvas.width, i);
+                ctx.stroke();
+            }
+
+            
+            backgroundElements.forEach(elem => {
+                ctx.globalAlpha = elem.opacity;
+                ctx.fillStyle = '#00aaff';
+                ctx.fillRect(elem.x, elem.y, elem.size, elem.size);
+                elem.x -= elem.speed * gameSpeed;
+                if (elem.x < -elem.size) {
+                    elem.x = canvas.width + elem.size;
+                    elem.y = Math.random() * canvas.height;
+                }
+            });
+            ctx.globalAlpha = 1;
+        }
+
+        
+        function drawParticles() {
+            particles = particles.filter(p => {
+                p.x += p.velocityX;
+                p.y += p.velocityY;
+                p.velocityX *= 0.98;
+                p.velocityY *= 0.98;
+                p.life--;
+                
+                if (p.life > 0) {
+                    const alpha = p.life / p.maxLife;
+                    ctx.globalAlpha = alpha;
+                    ctx.fillStyle = p.color;
+                    ctx.fillRect(p.x, p.y, p.size * alpha, p.size * alpha);
+                    return true;
+                }
+                return false;
+            });
+            ctx.globalAlpha = 1;
+        }
+
+        
+        function updatePlayer() {
+            
+            if (player.invulnerable > 0) player.invulnerable--;
+            
+            
+            if (keys.KeyW || keys.ArrowUp) player.velocityY = -player.speed;
+            else if (keys.KeyS || keys.ArrowDown) player.velocityY = player.speed;
+            else player.velocityY *= 0.85; 
+            
+            if (keys.KeyA || keys.ArrowLeft) player.velocityX = -player.speed;
+            else if (keys.KeyD || keys.ArrowRight) player.velocityX = player.speed;
+            else player.velocityX *= 0.85;
+
+            
+            player.velocityY += player.gravityDirection * player.gravityStrength;
+
+            
+            player.x += player.velocityX;
+            player.y += player.velocityY;
+
+            
+            if (player.x < 5) player.x = 5;
+            if (player.x > canvas.width - player.width - 5) player.x = canvas.width - player.width - 5;
+            if (player.y < 0) {
+                player.y = 0;
+                player.velocityY = Math.abs(player.velocityY) * 0.3; 
+            }
+            if (player.y > canvas.height - player.height) {
+                player.y = canvas.height - player.height;
+                player.velocityY = -Math.abs(player.velocityY) * 0.3; 
+            }
+        }
+
+        
+        function updateMovingHazards() {
+            movingHazards = movingHazards.filter((hazard, index) => {
+                hazard.x += hazard.velocityX;
+                hazard.life--;
+                
+                if (hazard.type === 'seeker') {
+                    
+                    const dx = (player.x + player.width/2) - hazard.x;
+                    const dy = (player.y + player.height/2) - hazard.y;
+                    hazard.velocityX += dx * hazard.seekForce * 0.01;
+                    hazard.velocityY += dy * hazard.seekForce * 0.01;
+                    hazard.y += hazard.velocityY;
+                    
+                } else if (hazard.type === 'bouncer') {
+                    hazard.y += hazard.velocityY;
+                    if (hazard.y <= 0 || hazard.y >= canvas.height) {
+                        hazard.velocityY *= -1;
+                        hazard.bounceCount++;
+                        if (hazard.bounceCount >= hazard.maxBounces) {
+                            hazard.life = 0;
+                        }
+                    }
+                    
+                } else if (hazard.type === 'spinner') {
+                    hazard.y += Math.sin(frames * 0.05) * 1; 
+                }
+                
+                return hazard.x > -hazard.size && hazard.life > 0;
+            });
+        }
+
+        
+        function checkCollisions() {
+            if (player.invulnerable > 0) return; 
+            
+            
+            obstacles.forEach(obstacle => {
+                let collision = false;
+                
+                if (obstacle.type === 'crusher') {
+                    const topHeight = obstacle.topHeight + Math.sin(obstacle.phase) * 30;
+                    const bottomY = canvas.height - obstacle.bottomHeight - Math.sin(obstacle.phase) * 30;
+                    
+                    if (player.x < obstacle.x + obstacle.width &&
+                        player.x + player.width > obstacle.x) {
+                        if (player.y < topHeight || player.y + player.height > bottomY) {
+                            collision = true;
+                        }
+                    }
+                } else if (obstacle.type === 'wave') {
+                    const waveY = obstacle.y + Math.sin(obstacle.phase) * obstacle.amplitude;
+                    if (player.x < obstacle.x + obstacle.width &&
+                        player.x + player.width > obstacle.x &&
+                        player.y < waveY + obstacle.height/2 &&
+                        player.y + player.height > waveY - obstacle.height/2) {
+                        collision = true;
+                    }
+                } else {
+                    if (player.x < obstacle.x + obstacle.width &&
+                        player.x + player.width > obstacle.x &&
+                        player.y < obstacle.y + obstacle.height &&
+                        player.y + player.height > obstacle.y) {
+                        collision = true;
+                    }
+                }
+                
+                if (collision) {
+                    gameOver();
+                }
+            });
+
+            
+            movingHazards.forEach(hazard => {
+                const dx = (player.x + player.width/2) - hazard.x;
+                const dy = (player.y + player.height/2) - hazard.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < hazard.size + Math.min(player.width, player.height)/2) {
+                    gameOver();
+                }
+            });
+
+            
+            orbs.forEach(orb => {
+                if (!orb.collected) {
+                    const dx = player.x + player.width / 2 - orb.x;
+                    const dy = player.y + player.height / 2 - orb.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < orb.radius + 8) {
+                        orb.collected = true;
+                        score += 15; 
+                        createParticles(orb.x, orb.y, '#00ff88', 15);
+                        updateHUD();
+                    }
+                }
+            });
+        }
+
+        
+        function gameOver() {
+            gameState = 'gameOver';
+            gameStateElement.textContent = 'Game Over! Press R to Restart';
+            createParticles(player.x + player.width / 2, player.y + player.height / 2, '#ff0000', 20);
+        }
+        
+        function updateHUD() {
+            scoreElement.textContent = `Score: ${score}`;
+            const speedMultiplier = Math.floor(gameSpeed * 10) / 10;
+            speedElement.textContent = `Speed: ${speedMultiplier}x`;
+        }
+
+        
+        function reset() {
+            player.x = 100;
+            player.y = canvas.height / 2;
+            player.velocityX = 0;
+            player.velocityY = 0;
+            player.gravityDirection = 1;
+            player.trail = [];
+            player.invulnerable = 0;
+            
+            obstacles = [];
+            orbs = [];
+            particles = [];
+            movingHazards = [];
+            warningZones = [];
+            
+            score = 0;
+            gameSpeed = 3.5; 
+            difficulty = 1;
+            frames = 0;
+            gameState = 'menu';
+            
+            updateHUD();
+            gameStateElement.textContent = 'Press any key to start!';
+            gameTitleElement.style.display = 'block';
+        }
+
+        
+        const keys = {};
+        document.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            
+            if (gameState === 'menu') {
+                gameState = 'playing';
+                gameStateElement.textContent = '';
+                gameTitleElement.style.display = 'none';
+            } else if (gameState === 'playing') {
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    player.gravityDirection *= -1;
+                    createParticles(player.x + player.width / 2, player.y + player.height / 2, 
+                        player.gravityDirection === 1 ? '#ff4040' : '#4040ff', 8);
+                }
+            }
+            
+            if (e.code === 'KeyR') {
+                reset();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+
+        
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            drawBackground();
+            
+            if (gameState === 'playing') {
+                updatePlayer();
+                updateMovingHazards();
+                
+                
+                difficulty = Math.floor(score / 50) + 1;
+                
+                
+                const baseSpawnRate = Math.max(45 - difficulty * 3, 25); 
+                if (frames % baseSpawnRate === 0) {
+                    createObstacle();
+                    
+                    createWarning(canvas.width - 50, 0, 60, canvas.height);
+                }
+                if (frames % Math.max(70 - difficulty * 2, 40) === 0) createOrb();
+                if (frames % Math.max(120 - difficulty * 5, 60) === 0) createMovingHazard();
+                
+                
+                obstacles.forEach((obstacle, index) => {
+                    obstacle.x -= gameSpeed;
+                    if (obstacle.x + (obstacle.width || 25) < 0) {
+                        obstacles.splice(index, 1);
+                        score += Math.floor(difficulty / 2) + 1; 
+                        updateHUD();
+                    }
+                });
+                
+                orbs.forEach((orb, index) => {
+                    orb.x -= gameSpeed;
+                    if (orb.x + orb.radius < 0) {
+                        orbs.splice(index, 1);
+                    }
+                });
+                
+                warningZones = warningZones.filter(warning => {
+                    warning.life--;
+                    warning.x -= gameSpeed;
+                    return warning.life > 0 && warning.x > -warning.width;
+                });
+                
+                checkCollisions();
+                
+                
+                gameSpeed += 0.008 + (difficulty * 0.002);
+                
+                frames++;
+            }
+            
+            drawWarnings();
+            drawObstacles();
+            drawOrbs();
+            drawMovingHazards();
+            drawPlayer();
+            drawParticles();
+            
+            requestAnimationFrame(gameLoop);
+        }
+
+        
+        initBackground();
+        reset();
+        gameLoop();
+    </script>
+</body>
+</html>
