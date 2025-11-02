@@ -63,7 +63,8 @@
 <body>
     <div class="hud">
         <div id="score">Score: 0</div>
-        <div id="speed">Speed: 1x</div>
+        <div id="previousScore" style="font-size: 14px; color: #00aacc;">Previous: 0</div>
+        <div id="speed">Speed: 3.5x</div>
         <div id="gameState" style="font-size: 16px; margin-top: 10px;"></div>
     </div>
     
@@ -80,39 +81,40 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const scoreElement = document.getElementById('score');
+        const previousScoreElement = document.getElementById('previousScore');
         const speedElement = document.getElementById('speed');
         const gameStateElement = document.getElementById('gameState');
         const gameTitleElement = document.getElementById('gameTitle');
         
         let gameState = 'menu'; 
         let score = 0;
-        let gameSpeed = 3.5; 
+        let previousScore = 0;
+        const gameSpeed = 3.5;
         let frames = 0;
         let difficulty = 1;
 
-        
         const player = {
             x: 100,
             y: canvas.height / 2,
-            width: 18, 
-            height: 18,
+            width: 20, 
+            height: 20,
             velocityX: 0,
             velocityY: 0,
             speed: 5, 
             gravityDirection: 1, 
-            gravityStrength: 0.4, 
+            gravityStrength: 0.35, 
             onGround: false,
             trail: [],
             invulnerable: 0 
         };
 
-        
         let obstacles = [];
         let orbs = [];
         let particles = [];
         let backgroundElements = [];
         let movingHazards = []; 
-        let warningZones = []; 
+        let warningZones = [];
+        
         function initBackground() {
             backgroundElements = [];
             for (let i = 0; i < 50; i++) {
@@ -126,13 +128,11 @@
             }
         }
 
-        
         function createObstacle() {
             const types = ['laser', 'barrier', 'spike', 'crusher', 'wave'];
             const type = types[Math.floor(Math.random() * types.length)];
             
             if (type === 'laser') {
-                
                 const laserCount = Math.random() < 0.6 ? 1 : Math.floor(Math.random() * 3) + 2;
                 for (let i = 0; i < laserCount; i++) {
                     obstacles.push({
@@ -158,7 +158,6 @@
                     segments: Math.floor(height / 8)
                 });
                 
-                
                 if (Math.random() < 0.4 && height < canvas.height * 0.6) {
                     obstacles.push({
                         type: 'barrier',
@@ -171,7 +170,6 @@
                     });
                 }
             } else if (type === 'spike') {
-                
                 const spikeCount = Math.floor(Math.random() * 3) + 1;
                 for (let i = 0; i < spikeCount; i++) {
                     const isTop = Math.random() > 0.5;
@@ -213,9 +211,8 @@
             }
         }
 
-        
         function createMovingHazard() {
-            const types = ['seeker', 'bouncer', 'spinner'];
+            const types = ['bouncer', 'spinner'];
             const type = types[Math.floor(Math.random() * types.length)];
             
             if (type === 'seeker') {
@@ -257,7 +254,6 @@
             }
         }
 
-        
         function createOrb() {
             orbs.push({
                 x: canvas.width,
@@ -270,7 +266,6 @@
             });
         }
 
-        
         function createWarning(x, y, width, height) {
             warningZones.push({
                 x: x,
@@ -282,7 +277,6 @@
             });
         }
 
-        
         function createParticles(x, y, color, count = 10) {
             for (let i = 0; i < count; i++) {
                 particles.push({
@@ -298,7 +292,6 @@
             }
         }
 
-        
         function drawPlayer() {
             if (frames % 3 === 0) {
                 player.trail.push({
@@ -308,7 +301,6 @@
                 });
             }
 
-            
             player.trail = player.trail.filter(t => {
                 t.life--;
                 if (t.life > 0) {
@@ -323,18 +315,15 @@
 
             ctx.globalAlpha = 1;
 
-            
             ctx.shadowColor = '#00ffff';
             ctx.shadowBlur = 15;
             ctx.fillStyle = '#00ffff';
             ctx.fillRect(player.x, player.y, player.width, player.height);
 
-            
             ctx.shadowBlur = 0;
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(player.x + 4, player.y + 4, player.width - 8, player.height - 8);
 
-            
             const indicatorY = player.gravityDirection === 1 ? 
                 player.y + player.height + 10 : player.y - 15;
             ctx.fillStyle = player.gravityDirection === 1 ? '#ff4040' : '#4040ff';
@@ -354,7 +343,6 @@
                     ctx.globalAlpha = intensity;
                     ctx.fillStyle = obstacle.color;
                     ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
-                    
                     
                     ctx.strokeStyle = obstacle.color;
                     ctx.lineWidth = 3;
@@ -399,9 +387,7 @@
                     const offset = Math.sin(obstacle.phase) * 30;
                     
                     ctx.fillStyle = obstacle.color;
-                    
                     ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.topHeight + offset);
-                    
                     ctx.fillRect(obstacle.x, canvas.height - obstacle.bottomHeight - offset, 
                         obstacle.width, obstacle.bottomHeight + offset);
                     
@@ -418,7 +404,6 @@
             });
         }
 
-        
         function drawMovingHazards() {
             movingHazards.forEach(hazard => {
                 ctx.shadowBlur = 15;
@@ -429,7 +414,6 @@
                     ctx.beginPath();
                     ctx.arc(hazard.x, hazard.y, hazard.size, 0, Math.PI * 2);
                     ctx.fill();
-                    
                     
                     ctx.strokeStyle = hazard.color;
                     ctx.lineWidth = 3;
@@ -470,7 +454,6 @@
             });
         }
 
-        
         function drawWarnings() {
             warningZones.forEach(warning => {
                 const alpha = (warning.life / warning.maxLife) * 0.3;
@@ -485,7 +468,6 @@
             ctx.globalAlpha = 1;
         }
 
-        
         function drawOrbs() {
             orbs.forEach(orb => {
                 if (!orb.collected) {
@@ -499,7 +481,6 @@
                     ctx.arc(orb.x, orb.y, size, 0, Math.PI * 2);
                     ctx.fill();
                     
-                    // Inner glow
                     ctx.shadowBlur = 0;
                     ctx.fillStyle = '#ffffff';
                     ctx.beginPath();
@@ -509,9 +490,7 @@
             });
         }
 
-        
         function drawBackground() {
-            
             ctx.strokeStyle = 'rgba(0, 100, 150, 0.3)';
             ctx.lineWidth = 1;
             
@@ -530,7 +509,6 @@
                 ctx.stroke();
             }
 
-            
             backgroundElements.forEach(elem => {
                 ctx.globalAlpha = elem.opacity;
                 ctx.fillStyle = '#00aaff';
@@ -544,7 +522,6 @@
             ctx.globalAlpha = 1;
         }
 
-        
         function drawParticles() {
             particles = particles.filter(p => {
                 p.x += p.velocityX;
@@ -565,11 +542,8 @@
             ctx.globalAlpha = 1;
         }
 
-        
         function updatePlayer() {
-            
             if (player.invulnerable > 0) player.invulnerable--;
-            
             
             if (keys.KeyW || keys.ArrowUp) player.velocityY = -player.speed;
             else if (keys.KeyS || keys.ArrowDown) player.velocityY = player.speed;
@@ -579,14 +553,11 @@
             else if (keys.KeyD || keys.ArrowRight) player.velocityX = player.speed;
             else player.velocityX *= 0.85;
 
-            
             player.velocityY += player.gravityDirection * player.gravityStrength;
 
-            
             player.x += player.velocityX;
             player.y += player.velocityY;
 
-            
             if (player.x < 5) player.x = 5;
             if (player.x > canvas.width - player.width - 5) player.x = canvas.width - player.width - 5;
             if (player.y < 0) {
@@ -599,14 +570,12 @@
             }
         }
 
-        
         function updateMovingHazards() {
             movingHazards = movingHazards.filter((hazard, index) => {
                 hazard.x += hazard.velocityX;
                 hazard.life--;
                 
                 if (hazard.type === 'seeker') {
-                    
                     const dx = (player.x + player.width/2) - hazard.x;
                     const dy = (player.y + player.height/2) - hazard.y;
                     hazard.velocityX += dx * hazard.seekForce * 0.01;
@@ -631,10 +600,8 @@
             });
         }
 
-        
         function checkCollisions() {
             if (player.invulnerable > 0) return; 
-            
             
             obstacles.forEach(obstacle => {
                 let collision = false;
@@ -671,7 +638,6 @@
                 }
             });
 
-            
             movingHazards.forEach(hazard => {
                 const dx = (player.x + player.width/2) - hazard.x;
                 const dy = (player.y + player.height/2) - hazard.y;
@@ -682,7 +648,6 @@
                 }
             });
 
-            
             orbs.forEach(orb => {
                 if (!orb.collected) {
                     const dx = player.x + player.width / 2 - orb.x;
@@ -699,20 +664,19 @@
             });
         }
 
-        
         function gameOver() {
             gameState = 'gameOver';
+            previousScore = score;
             gameStateElement.textContent = 'Game Over! Press R to Restart';
             createParticles(player.x + player.width / 2, player.y + player.height / 2, '#ff0000', 20);
         }
         
         function updateHUD() {
             scoreElement.textContent = `Score: ${score}`;
-            const speedMultiplier = Math.floor(gameSpeed * 10) / 10;
-            speedElement.textContent = `Speed: ${speedMultiplier}x`;
+            previousScoreElement.textContent = `Previous: ${previousScore}`;
+            speedElement.textContent = `Speed: 3.5x`;
         }
 
-        
         function reset() {
             player.x = 100;
             player.y = canvas.height / 2;
@@ -729,7 +693,6 @@
             warningZones = [];
             
             score = 0;
-            gameSpeed = 3.5; 
             difficulty = 1;
             frames = 0;
             gameState = 'menu';
@@ -739,7 +702,6 @@
             gameTitleElement.style.display = 'block';
         }
 
-        
         const keys = {};
         document.addEventListener('keydown', (e) => {
             keys[e.code] = true;
@@ -766,7 +728,6 @@
             keys[e.code] = false;
         });
 
-        
         function gameLoop() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
@@ -776,19 +737,15 @@
                 updatePlayer();
                 updateMovingHazards();
                 
-                
                 difficulty = Math.floor(score / 50) + 1;
                 
-                
-                const baseSpawnRate = Math.max(45 - difficulty * 3, 25); 
+                const baseSpawnRate = Math.max(60 - difficulty * 2, 35); 
                 if (frames % baseSpawnRate === 0) {
                     createObstacle();
-                    
                     createWarning(canvas.width - 50, 0, 60, canvas.height);
                 }
-                if (frames % Math.max(70 - difficulty * 2, 40) === 0) createOrb();
-                if (frames % Math.max(120 - difficulty * 5, 60) === 0) createMovingHazard();
-                
+                if (frames % Math.max(80 - difficulty * 2, 50) === 0) createOrb();
+                if (frames % Math.max(150 - difficulty * 4, 80) === 0) createMovingHazard();
                 
                 obstacles.forEach((obstacle, index) => {
                     obstacle.x -= gameSpeed;
@@ -814,9 +771,6 @@
                 
                 checkCollisions();
                 
-                
-                gameSpeed += 0.008 + (difficulty * 0.002);
-                
                 frames++;
             }
             
@@ -830,7 +784,6 @@
             requestAnimationFrame(gameLoop);
         }
 
-        
         initBackground();
         reset();
         gameLoop();
